@@ -1,0 +1,190 @@
+version: "3.8"
+
+services:
+  # Tor proxy service
+  tor:
+    build:
+      context: ./tor
+      dockerfile: Dockerfile
+    container_name: fider_tor
+    restart: unless-stopped
+    volumes:
+      - tor_data:/var/lib/tor
+      - tor_logs:/var/log/tor
+      - ./tor/torrc:/etc/tor/torrc:ro
+    ports:
+      - "127.0.0.1:9050:9050"  # SOCKS proxy (localhost only)
+      - "127.0.0.1:9051:9051"  # Control port (localhost only)
+    networks:
+      - tor_network
+    environment:
+      - TOR_USER=tor
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/run/tor:noexec,nosuid,size=10m
+    healthcheck:
+      test: ["CMD", "curl", "--socks5", "127.0.0.1:9050", "--connect-timeout", "10", "http://3g2upl4pq6kufc4m.onion"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: fider_postgres_tor
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tor_network
+    environment:
+      POSTGRES_DB: fider
+      POSTGRES_USER: fider
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fider_secure_password}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/run/postgresql:noexec,nosuid,size=10m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fider -d fider"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Fider application
+  fider:
+    build:
+      context: .
+      dockerfile: Dockerfile.tor
+      args:
+        - COMMITHASH=${COMMITHASH:-unknown}
+        - VERSION=${VERSION:-tor-deployment}
+    container_name: fider_app_tor
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tor:
+        condition: service_healthy
+    volumes:
+      - fider_data:/app/data
+      - fider_logs:/app/logs
+      - ./tor/proxy-config:/app/proxy-config:ro
+    networks:
+      - tor_network
+    environment:
+      # Basic configuration
+      - GO_ENV=production
+      - PORT=3000
+      - HOST_MODE=single
+      
+      # Database
+      - DATABASE_URL=postgres://fider:${POSTGRES_PASSWORD:-fider_secure_password}@postgres:5432/fider?sslmode=require
+      
+      # Security
+      - JWT_SECRET=${JWT_SECRET}
+      
+      # Tor-specific settings
+      - BASE_URL=http://${ONION_ADDRESS:-your-onion-address.onion}
+      - TOR_PROXY=socks5://tor:9050
+      - HTTP_PROXY=socks5://tor:9050
+      - HTTPS_PROXY=socks5://tor:9050
+      - NO_PROXY=localhost,127.0.0.1,postgres,tor
+      
+      # Disable external services that could leak information
+      - OAUTH_GOOGLE_CLIENTID=
+      - OAUTH_FACEBOOK_APPID=
+      - OAUTH_GITHUB_CLIENTID=
+      - EMAIL_TYPE=disabled
+      - BLOB_STORAGE=sql
+      - METRICS_ENABLED=false
+      
+      # Security headers
+      - SECURITY_HEADERS_ENABLED=true
+      - CSP_REPORT_ONLY=false
+      
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_CONSOLE=true
+      - LOG_SQL=false
+      - LOG_FILE=true
+      - LOG_FILE_OUTPUT=/app/logs/fider.log
+      
+      # Additional security
+      - SIGNUP_DISABLED=${SIGNUP_DISABLED:-false}
+      - MAINTENANCE=${MAINTENANCE:-false}
+      
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /app/tmp:noexec,nosuid,size=50m
+    healthcheck:
+      test: ["CMD", "./fider", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: SMTP server for internal email (if needed)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: fider_mailhog_tor
+    restart: unless-stopped
+    networks:
+      - tor_network
+    environment:
+      - MH_STORAGE=maildir
+      - MH_MAILDIR_PATH=/maildir
+    volumes:
+      - mailhog_data:/maildir
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    profiles:
+      - email-enabled
+
+networks:
+  tor_network:
+    driver: bridge
+    internal: false  # Allow outbound connections through Tor
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  tor_data:
+    driver: local
+  tor_logs:
+    driver: local
+  postgres_data:
+    driver: local
+  fider_data:
+    driver: local
+  fider_logs:
+    driver: local
+  mailhog_data:
+    driver: local

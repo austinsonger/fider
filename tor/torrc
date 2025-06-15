@@ -1,0 +1,120 @@
+# Tor configuration for Fider hidden service
+# This configuration provides a secure setup for running Fider as a .onion service
+
+# Basic Tor settings
+DataDirectory /var/lib/tor
+PidFile /var/run/tor/tor.pid
+RunAsDaemon 1
+User tor
+
+# Logging configuration
+Log notice file /var/log/tor/tor.log
+Log warn file /var/log/tor/tor.log
+
+# Network settings
+SocksPort 0.0.0.0:9050
+ControlPort 0.0.0.0:9051
+HashedControlPassword 16:872860B76453A77D60CA2BB8C1A7042072093276A3D701AD684053EC4C
+
+# Hidden service configuration for Fider
+HiddenServiceDir /var/lib/tor/fider_hidden_service/
+HiddenServicePort 80 fider:3000
+HiddenServiceVersion 3
+
+# Security and privacy settings
+# Disable client connections to prevent accidental clearnet usage
+SocksPolicy reject *
+
+# Disable directory authorities connections except for consensus
+FetchDirInfoEarly 1
+FetchDirInfoExtraEarly 1
+
+# Circuit building preferences
+CircuitBuildTimeout 30
+LearnCircuitBuildTimeout 0
+MaxCircuitDirtiness 600
+
+# Entry guards
+NumEntryGuards 3
+UseEntryGuards 1
+
+# Bandwidth and connection limits
+MaxAdvertisedBandwidth 1 MB
+RelayBandwidthRate 1 MB
+RelayBandwidthBurst 2 MB
+MaxOnionQueueDelay 1750 msec
+
+# Security hardening
+SafeLogging 1
+HardwareAccel 0
+TestSocks 0
+WarnUnsafeSocks 1
+ClientRejectInternalAddresses 1
+
+# Disable unused features
+ClientOnly 1
+ExitPolicy reject *:*
+ExitRelay 0
+BridgeRelay 0
+
+# DNS settings
+DNSPort 0
+AutomapHostsOnResolve 0
+AutomapHostsSuffixes .exit,.onion
+
+# Disable statistics
+DisableDebuggerAttachment 1
+CellStatistics 0
+DirReqStatistics 0
+EntryStatistics 0
+ExtraInfoStatistics 0
+
+# Connection timeout settings
+CircuitsAvailableTimeout 30
+SocksTimeout 30
+
+# Onion service security
+HiddenServiceSingleHopMode 0
+HiddenServiceNonAnonymousMode 0
+
+# Additional security measures
+DisableAllSwap 1
+FetchUselessDescriptors 0
+PublishServerDescriptor 0
+
+# Prevent information leaks
+DisableNetwork 0
+UseBridges 0
+ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+
+# Path selection
+PathsNeededToBuildCircuits 0.95
+GuardfractionFile /var/lib/tor/guardfraction
+
+# Onion service performance tuning
+HiddenServiceMaxStreams 10
+HiddenServiceMaxStreamsCloseCircuit 1
+
+# Additional hidden service security
+HiddenServiceAllowUnknownPorts 0
+HiddenServiceDirGroupReadable 0
+
+# Consensus and directory settings
+FetchServerDescriptors 0
+DownloadExtraInfo 0
+UseMicrodescriptors 1
+
+# Circuit isolation for different types of traffic
+IsolateDestAddr 1
+IsolateDestPort 1
+IsolateSOCKSAuth 1
+IsolateClientProtocol 1
+IsolateClientAddr 1
+
+# Additional hardening
+AvoidDiskWrites 1
+DisableIOCP 0
+CountPrivateBandwidth 0
+
+# Onion service descriptor settings
+HiddenServiceNumIntroductionPoints 3

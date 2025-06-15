@@ -1,0 +1,164 @@
+# Prometheus alerting rules for Fider Tor Hidden Service
+
+groups:
+  - name: fider-tor-alerts
+    rules:
+      # Service availability alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: FiderApplicationDown
+        expr: up{job="fider"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fider application is down"
+          description: "The Fider application has been unreachable for more than 30 seconds."
+
+      - alert: TorServiceDown
+        expr: up{job="tor"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tor service is down"
+          description: "The Tor service has been unreachable for more than 1 minute. Hidden service may be inaccessible."
+
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "The PostgreSQL database has been unreachable for more than 30 seconds."
+
+      # Resource usage alerts
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}."
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes on {{ $labels.instance }}."
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on {{ $labels.instance }}."
+
+      # Container-specific alerts
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container {{ $labels.name }} is using more than 80% CPU for 5 minutes."
+
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container {{ $labels.name }} is using more than 90% of its memory limit."
+
+      - alert: ContainerRestarting
+        expr: increase(container_start_time_seconds[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarting frequently"
+          description: "Container {{ $labels.name }} has restarted more than 3 times in the last hour."
+
+      # Network and connectivity alerts
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) > 100000000  # 100MB/s
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High network traffic"
+          description: "Network receive traffic is above 100MB/s for 5 minutes on {{ $labels.instance }}."
+
+      # Database-specific alerts
+      - alert: PostgreSQLTooManyConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL too many connections"
+          description: "PostgreSQL is using more than 80% of available connections."
+
+      - alert: PostgreSQLSlowQueries
+        expr: pg_stat_activity_max_tx_duration > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "PostgreSQL has queries running for more than 5 minutes."
+
+      # Security alerts
+      - alert: UnexpectedProcesses
+        expr: increase(node_processes_pids[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unexpected process creation"
+          description: "More than 100 new processes created in 5 minutes on {{ $labels.instance }}."
+
+      - alert: HighNetworkConnections
+        expr: node_netstat_Tcp_CurrEstab > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of network connections"
+          description: "More than 1000 established TCP connections on {{ $labels.instance }}."
+
+      # Tor-specific alerts (if custom metrics available)
+      - alert: TorCircuitBuildFailures
+        expr: increase(tor_circuit_build_failures_total[10m]) > 10
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tor circuit build failures"
+          description: "More than 10 Tor circuit build failures in the last 10 minutes."
+
+      - alert: HiddenServiceUnavailable
+        expr: tor_hidden_service_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Hidden service unavailable"
+          description: "The Tor hidden service has been unavailable for more than 2 minutes."
